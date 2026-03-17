@@ -2,7 +2,7 @@
 
 Kinara is a full-stack web application that uses computer vision and AI to analyse powerlifting technique in real time. Athletes upload a video of their lift, receive an instant form score, and get detailed coaching feedback highlighting strengths and corrections.
 
-Built for the UCL AI Hackathon 2026.
+Built for the UCL AI Hackathon 2026. Worked as a part of a team to create this.
 
 ---
 
