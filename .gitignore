@@ -7,3 +7,11 @@ kinara/outputs/
 kinara/__pycache__/
 kinara/**/.ipynb_checkpoints/
 .vscode/
+
+.env
+.env.local
+
+
+# clerk configuration (can include secrets)
+/.clerk/
+node_modules
