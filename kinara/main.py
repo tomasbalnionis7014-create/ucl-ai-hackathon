@@ -26,54 +26,63 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 # --- CLIENTS ---
-local_client = OpenAI(base_url="http://localhost:8000/v1", api_key="token-not-needed")
+local_client = OpenAI(base_url="http://localhost:8000/v1",
+                      api_key="token-not-needed")
 nvidia_client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1", 
-    api_key="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"
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=os.getenv("NVIDIA_API_KEY")
 )
 
 # Ensure output directory exists for saved videos
 os.makedirs("outputs", exist_ok=True)
 
 # Define the expected JSON payload from frontend
+
+
 class VideoRequest(BaseModel):
     videoUrl: str
     generateVideo: bool = False  # Added toggle
 
+
 def sample_turbo_frames(input_path: str, output_path: str, target_frames: int = 8):
     cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened(): return
-        
+    if not cap.isOpened():
+        return
+
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    
+
     scale = 224 / orig_h
     new_w, new_h = int(orig_w * scale), 224
 
     step = max(1, total_frames // target_frames)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, fps, (new_w, new_h))
-    
+
     count = 0
     for i in range(0, total_frames, step):
-        if count >= target_frames: break
+        if count >= target_frames:
+            break
         cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ret, frame = cap.read()
-        if not ret: break
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+        if not ret:
+            break
+        resized = cv2.resize(frame, (new_w, new_h),
+                             interpolation=cv2.INTER_NEAREST)
         out.write(resized)
         count += 1
-        
+
     cap.release()
     out.release()
+
 
 @app.post("/full-analysis")
 async def process_full_pipeline(req: VideoRequest):
     print(f"\n📥 [START] Pulling video from Cloudinary: {req.videoUrl}")
     overall_start = time.time()
-    
+
     # Download the video from Cloudinary directly to Brev
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4", dir="/tmp") as temp_in:
         try:
@@ -83,13 +92,15 @@ async def process_full_pipeline(req: VideoRequest):
                 temp_in.write(chunk)
             in_path = temp_in.name
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch video: {str(e)}")
-    
+            raise HTTPException(
+                status_code=400, detail=f"Failed to fetch video: {str(e)}")
+
     out_path = in_path.replace(".mp4", "_turbo.mp4")
-    
+
     # Define a permanent save path on the Brev server using the URL's filename
     safe_filename = req.videoUrl.split("/")[-1].split("?")[0]
-    if not safe_filename.endswith(".mp4"): safe_filename += ".mp4"
+    if not safe_filename.endswith(".mp4"):
+        safe_filename += ".mp4"
     annotated_path = f"outputs/annotated_{int(time.time())}_{safe_filename}"
 
     try:
@@ -110,7 +121,8 @@ async def process_full_pipeline(req: VideoRequest):
                             "If unsure, pick the closest of these three."
                         ),
                     },
-                    {"type": "video_url", "video_url": {"url": f"file://{out_path}"}}
+                    {"type": "video_url", "video_url": {
+                        "url": f"file://{out_path}"}}
                 ]
             }],
         )
@@ -125,7 +137,8 @@ async def process_full_pipeline(req: VideoRequest):
         detector = PoseDetector()
         poses, video_info = detector.process_video(in_path, sample_every_n=2)
         analyzer = MetricsAnalyzer()
-        analysis_obj = analyzer.analyze(poses, exercise_type=ex_key, exercise_confidence=0.9)
+        analysis_obj = analyzer.analyze(
+            poses, exercise_type=ex_key, exercise_confidence=0.9)
         mp_data = dataclasses.asdict(analysis_obj)
         print("\n📹 Video info:", video_info)
         print(f"🧍 Pose samples: {len(poses)} (sample_every_n=2)")
@@ -142,7 +155,7 @@ async def process_full_pipeline(req: VideoRequest):
         print("☁️ [3/4] Hitting NVIDIA NIM...")
         clean_data = mp_data.copy()
         clean_data.pop("angle_curves", None)
-        
+
         # Updated prompt to force specific arrays
         sys_prompt = """
         You are an elite powerlifting coach writing FORM FEEDBACK for barbell squat, bench press, and deadlift.
@@ -207,13 +220,15 @@ async def process_full_pipeline(req: VideoRequest):
         else:
             print("⏭️ [4/4] Skipping Annotated Video generation...")
         total_time = time.time() - overall_start
-        
+
         # --- NEW DETAILED TERMINAL PRINTS ---
-        print(f"\n✅ [COMPLETE] Total Time: {total_time:.2f}s. Video: {annotated_path}")
+        print(
+            f"\n✅ [COMPLETE] Total Time: {total_time:.2f}s. Video: {annotated_path}")
         print("\n🏋️ --- REP-BY-REP BREAKDOWN ---")
         for r in mp_data.get("reps", []):
             icon = "✅" if r["status"] == "completed" else "❌"
-            print(f"  {icon} Rep {r['rep_number']:<2} | ROM: {r['range_of_motion']:>5.1f}° | Time: {r['duration_s']:>4.2f}s | Status: {r['status'].upper()}")
+            print(
+                f"  {icon} Rep {r['rep_number']:<2} | ROM: {r['range_of_motion']:>5.1f}° | Time: {r['duration_s']:>4.2f}s | Status: {r['status'].upper()}")
         print("----------------------------------")
 
         # FINAL JSON RESPONSE (Flattened for Frontend)
