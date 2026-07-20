@@ -1,21 +1,23 @@
-import os
-import cv2
-import time
-import tempfile
-import shutil
-import json
-import dataclasses
-import requests
-from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
-from openai import OpenAI
-from fastapi.middleware.cors import CORSMiddleware
+from video_annotator import VideoAnnotator
+from metrics_analyzer import MetricsAnalyzer
+from pose_detector import PoseDetector
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import requests
+import dataclasses
+import json
+import shutil
+import tempfile
+import time
+import cv2
+import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # Import your actual classes
-from pose_detector import PoseDetector
-from metrics_analyzer import MetricsAnalyzer
-from video_annotator import VideoAnnotator
 
 app = FastAPI()
 app.add_middleware(
